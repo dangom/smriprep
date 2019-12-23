@@ -12,7 +12,8 @@ from nipype.interfaces import (
 )
 
 from nipype.interfaces.ants.base import Info as ANTsInfo
-from nipype.interfaces.ants import N4BiasFieldCorrection
+# from nipype.interfaces.ants import N4BiasFieldCorrection
+from nipype.interfaces.spm import Segment
 
 from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 from niworkflows.interfaces.freesurfer import (
@@ -470,10 +471,26 @@ A T1w-reference map was computed after registration of
     #     in log-transformed intensity units. Therefore, it is not a linear
     #     combination of fields and N4 fails with merged images.
     # 1b. Align and merge if several T1w images are provided
-    n4_correct = pe.MapNode(
-        N4BiasFieldCorrection(dimension=3, copy_header=True),
-        iterfield='input_image', name='n4_correct',
+
+    # n4_correct = pe.MapNode(
+    #     N4BiasFieldCorrection(dimension=3, copy_header=True),
+    #     iterfield='input_image', name='n4_correct',
+    #     n_procs=1)  # n_procs=1 for reproducibility
+
+    spm_correct = pe.MapNode(
+        Segment(gm_output_type=[False, False, False],
+                wm_output_type=[False, False, False],
+                csf_output_type=[False, False, False],
+                clean_masks="thorough",
+                save_bias_corrected=True,
+                bias_regularization=0.001,
+                bias_fwhm=20,
+                sampling_distance=3,
+                use_mcr=True,
+                affine_regularization="mni"),
+        iterfield='data', name='spm_correct',
         n_procs=1)  # n_procs=1 for reproducibility
+
     # StructuralReference is fs.RobustTemplate if > 1 volume, copying otherwise
     t1w_merge = pe.Node(
         StructuralReference(auto_detect_sensitivity=True,
@@ -503,11 +520,11 @@ A T1w-reference map was computed after registration of
     workflow.connect([
         (t1w_ref_dimensions, t1w_conform_xfm, [('t1w_valid_list', 'source_file')]),
         (t1w_conform, t1w_conform_xfm, [('out_file', 'target_file')]),
-        (t1w_conform, n4_correct, [('out_file', 'input_image')]),
+        (t1w_conform, spm_correct, [('out_file', 'data')]),
         (t1w_conform, t1w_merge, [
             (('out_file', _set_threads, omp_nthreads), 'num_threads'),
             (('out_file', add_suffix, '_template'), 'out_file')]),
-        (n4_correct, t1w_merge, [('output_image', 'in_files')]),
+        (spm_correct, t1w_merge, [('bias_corrected_image', 'in_files')]),
         (t1w_merge, t1w_reorient, [('out_file', 'in_file')]),
         # Combine orientation and template transforms
         (t1w_conform_xfm, concat_affines, [('out_lta', 'in_lta1')]),
