@@ -484,7 +484,7 @@ A T1w-reference map was computed after registration of
                 clean_masks="thorough",
                 save_bias_corrected=True,
                 bias_regularization=0.001,
-                bias_fwhm=20,
+                bias_fwhm=30,
                 sampling_distance=3,
                 use_mcr=True,
                 affine_regularization="mni"),
